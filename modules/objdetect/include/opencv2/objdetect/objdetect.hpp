@@ -382,6 +382,16 @@ public:
                                    Size minSize=Size(),
                                    Size maxSize=Size() );
 
+#define ADCAM_CASCADE_CLASSIFIER_MOD
+
+    CV_WRAP virtual void detectMultiScale( const Mat& image,
+                                   CV_OUT vector<Rect>& objects,
+                                   vector<int>& weights,
+                                   double scaleFactor=1.1,
+                                   int minNeighbors=3, int flags=0,
+                                   Size minSize=Size(),
+                                   Size maxSize=Size() );
+
     CV_WRAP virtual void detectMultiScale( const Mat& image,
                                    CV_OUT vector<Rect>& objects,
                                    vector<int>& rejectLevels,
@@ -390,7 +400,8 @@ public:
                                    int minNeighbors=3, int flags=0,
                                    Size minSize=Size(),
                                    Size maxSize=Size(),
-                                   bool outputRejectLevels=false );
+                                   bool outputRejectLevels=false,
+                                   bool outputWeights=false );
 
 
     bool isOldFormatCascade() const;
