@@ -275,7 +275,7 @@ endif()
 
 if(WIN32)
   # Postfix of DLLs:
-  set(OPENCV_DLLVERSION "${OPENCV_VERSION_MAJOR}${OPENCV_VERSION_MINOR}${OPENCV_VERSION_PATCH}")
+  set(OPENCV_DLLVERSION "")
   set(OPENCV_DEBUG_POSTFIX d)
 else()
   # Postfix of so's:
