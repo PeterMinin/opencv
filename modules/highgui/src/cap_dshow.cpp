@@ -223,7 +223,8 @@ DEFINE_GUID(MEDIASUBTYPE_YUYV,0x56595559,0x0000,0x0010,0x80,0x00,0x00,0xaa,0x00,
 DEFINE_GUID(MEDIASUBTYPE_YV12,0x32315659,0x0000,0x0010,0x80,0x00,0x00,0xaa,0x00,0x38,0x9b,0x71);
 DEFINE_GUID(MEDIASUBTYPE_YVU9,0x39555659,0x0000,0x0010,0x80,0x00,0x00,0xaa,0x00,0x38,0x9b,0x71);
 DEFINE_GUID(MEDIASUBTYPE_YVYU,0x55595659,0x0000,0x0010,0x80,0x00,0x00,0xaa,0x00,0x38,0x9b,0x71);
-DEFINE_GUID(MEDIASUBTYPE_MJPG,0x47504A4D, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71); // MGB
+DEFINE_GUID(MEDIASUBTYPE_MJPG,0x47504A4D, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71);
+DEFINE_GUID(MEDIASUBTYPE_H264,0x34363248, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71); // MGB
 DEFINE_GUID(MEDIATYPE_Interleaved,0x73766169,0x0000,0x0010,0x80,0x00,0x00,0xaa,0x00,0x38,0x9b,0x71);
 DEFINE_GUID(MEDIATYPE_Video,0x73646976,0x0000,0x0010,0x80,0x00,0x00,0xaa,0x00,0x38,0x9b,0x71);
 DEFINE_GUID(PIN_CATEGORY_CAPTURE,0xfb6c4281,0x0353,0x11d1,0x90,0x5f,0x00,0x00,0xc0,0xcc,0x16,0xba);
@@ -348,7 +349,7 @@ static bool verbose = true;
 //videoInput defines
 #define VI_VERSION      0.1995
 #define VI_MAX_CAMERAS  20
-#define VI_NUM_TYPES    20 //MGB
+#define VI_NUM_TYPES    21 //MGB
 #define VI_NUM_FORMATS  18 //DON'T TOUCH
 
 //defines for setPhyCon - tuner is not as well supported as composite and s-video
@@ -1074,13 +1075,14 @@ videoInput::videoInput(){
     mediaSubtypes[12]    = MEDIASUBTYPE_Y41P;
     mediaSubtypes[13]    = MEDIASUBTYPE_Y211;
     mediaSubtypes[14]    = MEDIASUBTYPE_AYUV;
-    mediaSubtypes[15]    = MEDIASUBTYPE_MJPG; // MGB
+    mediaSubtypes[15]    = MEDIASUBTYPE_MJPG;
+    mediaSubtypes[16]    = MEDIASUBTYPE_H264; // MGB
 
     //non standard
-    mediaSubtypes[16]    = MEDIASUBTYPE_Y800;
-    mediaSubtypes[17]    = MEDIASUBTYPE_Y8;
-    mediaSubtypes[18]    = MEDIASUBTYPE_GREY;
-    mediaSubtypes[19]    = MEDIASUBTYPE_I420;
+    mediaSubtypes[17]    = MEDIASUBTYPE_Y800;
+    mediaSubtypes[18]    = MEDIASUBTYPE_Y8;
+    mediaSubtypes[19]    = MEDIASUBTYPE_GREY;
+    mediaSubtypes[20]    = MEDIASUBTYPE_I420;
 
     //The video formats we support
     formatTypes[VI_NTSC_M]      = AnalogVideo_NTSC_M;
@@ -1939,6 +1941,7 @@ bool videoInput::restartDevice(int id){
         bool bReconnect = VDList[id]->autoReconnect;
 
         unsigned long avgFrameTime = VDList[id]->requestedFrameTime;
+        bool decode = VDList[id]->decode;
 
         stopDevice(id);
 
@@ -1946,6 +1949,8 @@ bool videoInput::restartDevice(int id){
         if( avgFrameTime != (unsigned long)-1){
             VDList[id]->requestedFrameTime = avgFrameTime;
         }
+
+        VDList[id]->decode = decode;
 
         if( setupDevice(id, tmpW, tmpH, conn) ){
             //reapply the format - ntsc / pal etc
@@ -2195,6 +2200,7 @@ void videoInput::getMediaSubtypeAsString(GUID type, char * typeAsString){
     else if(type == MEDIASUBTYPE_Y8)    sprintf(tmpStr, "Y8");
     else if(type == MEDIASUBTYPE_GREY)  sprintf(tmpStr, "GREY");
     else if(type == MEDIASUBTYPE_I420)  sprintf(tmpStr, "I420");
+    else if(type == MEDIASUBTYPE_H264)  sprintf(tmpStr, "H264");
     else sprintf(tmpStr, "OTHER");
 
     memcpy(typeAsString, tmpStr, sizeof(char)*8);
@@ -3300,14 +3306,9 @@ bool CvCaptureCAM_DShow::setProperty( int property_id, double value )
 
     case CV_CAP_PROP_DECODE: {
         bool decode = (value != 0);
-        if (decode != VI.getDecode(index))
-        {
-            VI.stopDevice(index);
+        if (decode != VI.getDecode(index)) {
             VI.setDecode(index, decode);
-            if (widthSet > 0 && heightSet > 0)
-                VI.setupDevice(index, widthSet, heightSet);
-            else
-                VI.setupDevice(index);
+            VI.restartDevice(index);
         }
         return VI.isDeviceSetup(index);
     }
@@ -3316,7 +3317,9 @@ bool CvCaptureCAM_DShow::setProperty( int property_id, double value )
         int fps = cvRound(value);
         if (fps != VI.getFPS(index))
         {
+            bool decode = VI.getDecode(index);
             VI.stopDevice(index);
+            VI.setDecode(index, decode); // little workaround for "decode" parameter
             VI.setIdealFramerate(index,fps);
             if (widthSet > 0 && heightSet > 0)
                 VI.setupDevice(index, widthSet, heightSet);
@@ -3334,8 +3337,10 @@ bool CvCaptureCAM_DShow::setProperty( int property_id, double value )
             if( width != VI.getWidth(index) || height != VI.getHeight(index) )//|| fourcc != VI.getFourcc(index) )
             {
                 int fps = static_cast<int>(VI.getFPS(index));
+                bool decode = VI.getDecode(index);
                 VI.stopDevice(index);
                 VI.setIdealFramerate(index, fps);
+                VI.setDecode(index, decode); // little workaround for "decode" parameter
                 VI.setupDeviceFourcc(index, width, height, fourcc);
             }
 
