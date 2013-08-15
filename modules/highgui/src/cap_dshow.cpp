@@ -448,6 +448,7 @@ class videoDevice{
         int  storeConn;
         int  myID;
         long requestedFrameTime; //ie fps
+        bool decode;
 
         char  nDeviceName[255];
         WCHAR wDeviceName[255];
@@ -543,6 +544,9 @@ class videoInput{
         int  getSize(int deviceID);
         int  getFourcc(int deviceID);
         double getFPS(int deviceID);
+
+        void setDecode(int deviceID, bool decode);
+        bool getDecode(int deviceID);
 
         //completely stops and frees a device
         void stopDevice(int deviceID);
@@ -778,6 +782,7 @@ videoDevice::videoDevice(){
      specificFormat     = false;
      autoReconnect      = false;
      requestedFrameTime = -1;
+     decode             = true;
 
      memset(wDeviceName, 0, sizeof(WCHAR) * 255);
      memset(nDeviceName, 0, sizeof(char) * 255);
@@ -1455,6 +1460,15 @@ double videoInput::getFPS(int id){
     return 0;
 
 }
+
+void videoInput::setDecode(int deviceID, bool decode) {
+    VDList[deviceID]->decode = decode;
+}
+
+bool videoInput::getDecode(int deviceID) {
+    return VDList[deviceID]->decode;
+}
+
 
 
 // ----------------------------------------------------------------------
@@ -2666,7 +2680,10 @@ int videoInput::start(int deviceID, videoDevice *VD){
     ZeroMemory(&mt,sizeof(AM_MEDIA_TYPE));
 
     mt.majortype     = MEDIATYPE_Video;
-    mt.subtype         = MEDIASUBTYPE_RGB24;
+    if (VD->decode)
+        mt.subtype = MEDIASUBTYPE_RGB24;
+    else
+        mt.subtype = VD->pAmMediaType->subtype;
     mt.formattype     = FORMAT_VideoInfo;
 
     //VD->pAmMediaType->subtype = VD->videoType;
@@ -3280,6 +3297,20 @@ bool CvCaptureCAM_DShow::setProperty( int property_id, double value )
         }
         handled = true;
         break;
+
+    case CV_CAP_PROP_DECODE: {
+        bool decode = (value != 0);
+        if (decode != VI.getDecode(index))
+        {
+            VI.stopDevice(index);
+            VI.setDecode(index, decode);
+            if (widthSet > 0 && heightSet > 0)
+                VI.setupDevice(index, widthSet, heightSet);
+            else
+                VI.setupDevice(index);
+        }
+        return VI.isDeviceSetup(index);
+    }
 
     case CV_CAP_PROP_FPS:
         int fps = cvRound(value);
