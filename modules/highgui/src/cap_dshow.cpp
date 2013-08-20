@@ -3243,6 +3243,9 @@ double CvCaptureCAM_DShow::getProperty( int property_id )
 
     case CV_CAP_PROP_FPS:
         return VI.getFPS(index);
+
+    case CV_CAP_PROP_DECODE:
+    	return VI.getDecode(index);
     }
 
     // video filter properties
