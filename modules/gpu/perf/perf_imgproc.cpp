@@ -562,7 +562,17 @@ PERF_TEST_P(Sz, ImgProc_CalcHist,
     }
     else
     {
-        FAIL_NO_CPU();
+        cv::Mat dst;
+
+        const int hbins = 256;
+        const float hranges[] = {0.0f, 256.0f};
+        const int histSize[] = {hbins};
+        const float* ranges[] = {hranges};
+        const int channels[] = {0};
+
+        TEST_CYCLE() cv::calcHist(&src, 1, channels, cv::Mat(), dst, 1, histSize, ranges);
+
+        CPU_SANITY_CHECK(dst);
     }
 }
 
@@ -662,7 +672,7 @@ PERF_TEST_P(Sz, ImgProc_ColumnSum,
 
 DEF_PARAM_TEST(Image_AppertureSz_L2gradient, string, int, bool);
 
-PERF_TEST_P(Image_AppertureSz_L2gradient, ImgProc_Canny,
+PERF_TEST_P(Image_AppertureSz_L2gradient, DISABLED_ImgProc_Canny,
             Combine(Values("perf/800x600.png", "perf/1280x1024.png", "perf/1680x1050.png"),
                     Values(3, 5),
                     Bool()))
@@ -841,6 +851,8 @@ PERF_TEST_P(Sz_Depth_Cn, ImgProc_BlendLinear,
     }
 }
 
+#ifdef HAVE_CUFFT
+
 //////////////////////////////////////////////////////////////////////
 // Convolve
 
@@ -874,7 +886,7 @@ PERF_TEST_P(Sz_KernelSz_Ccorr, ImgProc_Convolve,
 
         TEST_CYCLE() cv::gpu::convolve(d_image, d_templ, dst, ccorr, d_buf);
 
-        GPU_SANITY_CHECK(dst);
+        GPU_SANITY_CHECK(dst, 1e-6, ERROR_RELATIVE);
     }
     else
     {
@@ -1074,6 +1086,8 @@ PERF_TEST_P(Sz_Flags, ImgProc_Dft,
         CPU_SANITY_CHECK(dst);
     }
 }
+
+#endif
 
 //////////////////////////////////////////////////////////////////////
 // CornerHarris
@@ -1763,7 +1777,7 @@ PERF_TEST_P(Image, ImgProc_HoughLinesP,
 
 DEF_PARAM_TEST(Sz_Dp_MinDist, cv::Size, float, float);
 
-PERF_TEST_P(Sz_Dp_MinDist, ImgProc_HoughCircles,
+PERF_TEST_P(Sz_Dp_MinDist, DISABLED_ImgProc_HoughCircles,
             Combine(GPU_TYPICAL_MAT_SIZES,
                     Values(1.0f, 2.0f, 4.0f),
                     Values(1.0f)))
@@ -1815,7 +1829,7 @@ CV_FLAGS(GHMethod, GHT_POSITION, GHT_SCALE, GHT_ROTATION);
 
 DEF_PARAM_TEST(Method_Sz, GHMethod, cv::Size);
 
-PERF_TEST_P(Method_Sz, ImgProc_GeneralizedHough,
+PERF_TEST_P(Method_Sz, DISABLED_ImgProc_GeneralizedHough,
             Combine(Values(GHMethod(cv::GHT_POSITION), GHMethod(cv::GHT_POSITION | cv::GHT_SCALE), GHMethod(cv::GHT_POSITION | cv::GHT_ROTATION), GHMethod(cv::GHT_POSITION | cv::GHT_SCALE | cv::GHT_ROTATION)),
                     GPU_TYPICAL_MAT_SIZES))
 {

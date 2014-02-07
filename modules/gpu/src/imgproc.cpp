@@ -244,6 +244,10 @@ void cv::gpu::reprojectImageTo3D(const GpuMat& disp, GpuMat& xyz, const Mat& Q, 
 ////////////////////////////////////////////////////////////////////////
 // copyMakeBorder
 
+// Disable NPP for this file
+//#define USE_NPP
+#undef USE_NPP
+
 namespace cv { namespace gpu { namespace device
 {
     namespace imgproc
@@ -279,6 +283,7 @@ void cv::gpu::copyMakeBorder(const GpuMat& src, GpuMat& dst, int top, int bottom
 
     cudaStream_t stream = StreamAccessor::getStream(s);
 
+#ifdef USE_NPP
     if (borderType == BORDER_CONSTANT && (src.type() == CV_8UC1 || src.type() == CV_8UC4 || src.type() == CV_32SC1 || src.type() == CV_32FC1))
     {
         NppiSize srcsz;
@@ -328,6 +333,7 @@ void cv::gpu::copyMakeBorder(const GpuMat& src, GpuMat& dst, int top, int bottom
             cudaSafeCall( cudaDeviceSynchronize() );
     }
     else
+#endif
     {
         typedef void (*caller_t)(const PtrStepSzb& src, const PtrStepSzb& dst, int top, int left, int borderType, const Scalar& value, cudaStream_t stream);
         static const caller_t callers[6][4] =
@@ -889,6 +895,21 @@ void cv::gpu::histEven(const GpuMat& src, GpuMat& hist, int histSize, int lowerL
     histEven(src, hist, buf, histSize, lowerLevel, upperLevel, stream);
 }
 
+namespace hist
+{
+    void histEven8u(PtrStepSzb src, int* hist, int binCount, int lowerLevel, int upperLevel, cudaStream_t stream);
+}
+
+namespace
+{
+    void histEven8u(const GpuMat& src, GpuMat& hist, int histSize, int lowerLevel, int upperLevel, cudaStream_t stream)
+    {
+        hist.create(1, histSize, CV_32S);
+        cudaSafeCall( cudaMemsetAsync(hist.data, 0, histSize * sizeof(int), stream) );
+        hist::histEven8u(src, hist.ptr<int>(), histSize, lowerLevel, upperLevel, stream);
+    }
+}
+
 void cv::gpu::histEven(const GpuMat& src, GpuMat& hist, GpuMat& buf, int histSize, int lowerLevel, int upperLevel, Stream& stream)
 {
     CV_Assert(src.type() == CV_8UC1 || src.type() == CV_16UC1 || src.type() == CV_16SC1 );
@@ -901,6 +922,12 @@ void cv::gpu::histEven(const GpuMat& src, GpuMat& hist, GpuMat& buf, int histSiz
         NppHistogramEvenC1<CV_16U, nppiHistogramEven_16u_C1R, nppiHistogramEvenGetBufferSize_16u_C1R>::hist,
         NppHistogramEvenC1<CV_16S, nppiHistogramEven_16s_C1R, nppiHistogramEvenGetBufferSize_16s_C1R>::hist
     };
+
+    if (src.depth() == CV_8U && deviceSupports(FEATURE_SET_COMPUTE_30))
+    {
+        histEven8u(src, hist, histSize, lowerLevel, upperLevel, StreamAccessor::getStream(stream));
+        return;
+    }
 
     hist_callers[src.depth()](src, hist, buf, histSize, lowerLevel, upperLevel, StreamAccessor::getStream(stream));
 }
@@ -1136,6 +1163,8 @@ void cv::gpu::cornerMinEigenVal(const GpuMat& src, GpuMat& dst, GpuMat& Dx, GpuM
 //////////////////////////////////////////////////////////////////////////////
 // mulSpectrums
 
+#ifdef HAVE_CUFFT
+
 namespace cv { namespace gpu { namespace device
 {
     namespace imgproc
@@ -1146,9 +1175,20 @@ namespace cv { namespace gpu { namespace device
     }
 }}}
 
+#endif
+
 void cv::gpu::mulSpectrums(const GpuMat& a, const GpuMat& b, GpuMat& c, int flags, bool conjB, Stream& stream)
 {
-    (void)flags;
+#ifndef HAVE_CUFFT
+    (void) a;
+    (void) b;
+    (void) c;
+    (void) flags;
+    (void) conjB;
+    (void) stream;
+    throw_nogpu();
+#else
+    (void) flags;
     using namespace ::cv::gpu::device::imgproc;
 
     typedef void (*Caller)(const PtrStep<cufftComplex>, const PtrStep<cufftComplex>, PtrStepSz<cufftComplex>, cudaStream_t stream);
@@ -1162,10 +1202,13 @@ void cv::gpu::mulSpectrums(const GpuMat& a, const GpuMat& b, GpuMat& c, int flag
 
     Caller caller = callers[(int)conjB];
     caller(a, b, c, StreamAccessor::getStream(stream));
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////////////
 // mulAndScaleSpectrums
+
+#ifdef HAVE_CUFFT
 
 namespace cv { namespace gpu { namespace device
 {
@@ -1177,8 +1220,20 @@ namespace cv { namespace gpu { namespace device
     }
 }}}
 
+#endif
+
 void cv::gpu::mulAndScaleSpectrums(const GpuMat& a, const GpuMat& b, GpuMat& c, int flags, float scale, bool conjB, Stream& stream)
 {
+#ifndef HAVE_CUFFT
+    (void) a;
+    (void) b;
+    (void) c;
+    (void) flags;
+    (void) scale;
+    (void) conjB;
+    (void) stream;
+    throw_nogpu();
+#else
     (void)flags;
     using namespace ::cv::gpu::device::imgproc;
 
@@ -1192,6 +1247,7 @@ void cv::gpu::mulAndScaleSpectrums(const GpuMat& a, const GpuMat& b, GpuMat& c, 
 
     Caller caller = callers[(int)conjB];
     caller(a, b, scale, c, StreamAccessor::getStream(stream));
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////////////
