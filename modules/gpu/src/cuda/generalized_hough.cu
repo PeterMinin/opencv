@@ -40,7 +40,9 @@
 //
 //M*/
 
-#define CUDA_DISABLER
+#if defined(__GNUC__) && (__GNUC__ * 10 + __GNUC_MINOR__ == 47)
+#   define CUDA_DISABLER
+#endif
 
 #if !defined CUDA_DISABLER
 

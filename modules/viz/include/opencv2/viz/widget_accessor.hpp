@@ -10,12 +10,8 @@
 //                           License Agreement
 //                For Open Source Computer Vision Library
 //
-// Copyright (C) 2010-2012, Institute Of Software Chinese Academy Of Science, all rights reserved.
-// Copyright (C) 2010-2012, Advanced Micro Devices, Inc., all rights reserved.
+// Copyright (C) 2013, OpenCV Foundation, all rights reserved.
 // Third party copyrights are property of their respective owners.
-//
-// @Authors
-//    Jiang Liyuan, jlyuan001.good@163.com
 //
 // Redistribution and use in source and binary forms, with or without modification,
 // are permitted provided that the following conditions are met:
@@ -30,7 +26,7 @@
 //   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
 //
-// This software is provided by the copyright holders and contributors as is and
+// This software is provided by the copyright holders and contributors "as is" and
 // any express or implied warranties, including, but not limited to, the implied
 // warranties of merchantability and fitness for a particular purpose are disclaimed.
 // In no event shall the Intel Corporation or contributors be liable for any direct,
@@ -41,46 +37,33 @@
 // or tort (including negligence or otherwise) arising in any way out of
 // the use of this software, even if advised of the possibility of such damage.
 //
+// Authors:
+//  * Ozan Tonkal, ozantonkal@gmail.com
+//  * Anatoly Baksheev, Itseez Inc.  myname.mysurname <> mycompany.com
+//
 //M*/
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////bitwise_binary////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////////
+#ifndef __OPENCV_VIZ_WIDGET_ACCESSOR_HPP__
+#define __OPENCV_VIZ_WIDGET_ACCESSOR_HPP__
 
-__kernel void arithm_bitwise_binary_scalar_mask(__global uchar *src1, int src1_step, int src1_offset,
-        __global uchar *src2,
-        __global uchar *mask, int mask_step, int mask_offset,
-        __global uchar *dst,  int dst_step,  int dst_offset,
-        int cols, int rows)
+#include <opencv2/core/types_c.h>
+#include <vtkSmartPointer.h>
+#include <vtkProp.h>
+
+namespace cv
 {
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-
-    if (x < cols && y < rows)
+    namespace viz
     {
-        int mask_index = mad24(y, mask_step, x + mask_offset);
+        class Widget;
 
-        if (mask[mask_index])
+        //The class is only that depends on VTK in its interface.
+        //It is indended for those users who want to develop own widgets system using VTK library API.
+        struct CV_EXPORTS WidgetAccessor
         {
-#if elemSize > 1
-            x *= elemSize;
-#endif
-            int src1_index = mad24(y, src1_step, x + src1_offset);
-            int dst_index = mad24(y, dst_step, x + dst_offset);
-
-#if elemSize > 1
-            #pragma unroll
-            for (int i = 0; i < elemSize; i += vlen)
-            {
-                ucharv t0 = vloadn(0, src1 + src1_index + i);
-                ucharv t1 = vloadn(0, src2 + i);
-                ucharv t2 = t0 Operation t1;
-
-                vstoren(t2, 0, dst + dst_index + i);
-            }
-#else
-            dst[dst_index] = src1[src1_index] Operation src2[0];
-#endif
-        }
+            static vtkSmartPointer<vtkProp> getProp(const Widget &widget);
+            static void setProp(Widget &widget, vtkSmartPointer<vtkProp> prop);
+        };
     }
 }
+
+#endif

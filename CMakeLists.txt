@@ -128,6 +128,7 @@ OCV_OPTION(WITH_1394           "Include IEEE1394 support"                    ON 
 OCV_OPTION(WITH_AVFOUNDATION   "Use AVFoundation for Video I/O"              ON   IF IOS)
 OCV_OPTION(WITH_CARBON         "Use Carbon for UI instead of Cocoa"          OFF  IF APPLE )
 OCV_OPTION(WITH_CUDA           "Include NVidia Cuda Runtime support"         ON   IF (CMAKE_VERSION VERSION_GREATER "2.8" AND NOT IOS) )
+OCV_OPTION(WITH_VTK            "Include VTK library support (and build opencv_viz module eiher)"             OFF IF (NOT ANDROID AND NOT IOS) )
 OCV_OPTION(WITH_CUFFT          "Include NVidia Cuda Fast Fourier Transform (FFT) library support"            ON  IF (CMAKE_VERSION VERSION_GREATER "2.8" AND NOT IOS) )
 OCV_OPTION(WITH_CUBLAS         "Include NVidia Cuda Basic Linear Algebra Subprograms (BLAS) library support" OFF IF (CMAKE_VERSION VERSION_GREATER "2.8" AND NOT IOS) )
 OCV_OPTION(WITH_NVCUVID        "Include NVidia Video Decoding library support"                               OFF IF (CMAKE_VERSION VERSION_GREATER "2.8" AND NOT ANDROID AND NOT IOS AND NOT APPLE) )
@@ -141,7 +142,7 @@ OCV_OPTION(WITH_IPP            "Include Intel IPP support"                   OFF
 OCV_OPTION(WITH_JASPER         "Include JPEG2K support"                      ON   IF (NOT IOS) )
 OCV_OPTION(WITH_JPEG           "Include JPEG support"                        ON)
 OCV_OPTION(WITH_OPENEXR        "Include ILM support via OpenEXR"             ON   IF (NOT IOS) )
-OCV_OPTION(WITH_OPENGL         "Include OpenGL support"                      OFF  IF (NOT ANDROID AND NOT APPLE) )
+OCV_OPTION(WITH_OPENGL         "Include OpenGL support"                      OFF  IF (NOT ANDROID) )
 OCV_OPTION(WITH_OPENNI         "Include OpenNI support"                      OFF  IF (NOT ANDROID AND NOT IOS) )
 OCV_OPTION(WITH_PNG            "Include PNG support"                         ON)
 OCV_OPTION(WITH_PVAPI          "Include Prosilica GigE support"              ON   IF (NOT ANDROID AND NOT IOS) )
@@ -205,6 +206,7 @@ OCV_OPTION(ENABLE_DYNAMIC_CUDA        "Enabled dynamic CUDA linkage"            
 OCV_OPTION(ENABLE_PRECOMPILED_HEADERS "Use precompiled headers"                                  ON   IF (NOT IOS) )
 OCV_OPTION(ENABLE_SOLUTION_FOLDERS    "Solution folder in Visual Studio or in other IDEs"        (MSVC_IDE OR CMAKE_GENERATOR MATCHES Xcode) IF (CMAKE_VERSION VERSION_GREATER "2.8.0") )
 OCV_OPTION(ENABLE_PROFILING           "Enable profiling in the GCC compiler (Add flags: -g -pg)" OFF  IF CMAKE_COMPILER_IS_GNUCXX )
+OCV_OPTION(ENABLE_COVERAGE            "Enable coverage collection with  GCov"                    OFF  IF CMAKE_COMPILER_IS_GNUCXX )
 OCV_OPTION(ENABLE_OMIT_FRAME_POINTER  "Enable -fomit-frame-pointer for GCC"                      ON   IF CMAKE_COMPILER_IS_GNUCXX AND NOT (APPLE AND CMAKE_COMPILER_IS_CLANGCXX) )
 OCV_OPTION(ENABLE_POWERPC             "Enable PowerPC for GCC"                                   ON   IF (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_SYSTEM_PROCESSOR MATCHES powerpc.*) )
 OCV_OPTION(ENABLE_FAST_MATH           "Enable -ffast-math (not recommended for GCC 4.6.x)"       OFF  IF (CMAKE_COMPILER_IS_GNUCXX AND (X86 OR X86_64)) )
@@ -268,13 +270,24 @@ if(WIN32)
     message(STATUS "Can't detect runtime and/or arch")
     set(OpenCV_INSTALL_BINARIES_PREFIX "")
   endif()
+elseif(ANDROID)
+  set(OpenCV_INSTALL_BINARIES_PREFIX "sdk/native/")
 else()
   set(OpenCV_INSTALL_BINARIES_PREFIX "")
 endif()
 
-set(OPENCV_SAMPLES_BIN_INSTALL_PATH "${OpenCV_INSTALL_BINARIES_PREFIX}samples")
+if(ANDROID)
+  set(OPENCV_SAMPLES_BIN_INSTALL_PATH "${OpenCV_INSTALL_BINARIES_PREFIX}samples/${ANDROID_NDK_ABI_NAME}")
+else()
+  set(OPENCV_SAMPLES_BIN_INSTALL_PATH "${OpenCV_INSTALL_BINARIES_PREFIX}samples")
+endif()
 
-set(OPENCV_BIN_INSTALL_PATH "${OpenCV_INSTALL_BINARIES_PREFIX}bin")
+if(ANDROID)
+  set(OPENCV_BIN_INSTALL_PATH "${OpenCV_INSTALL_BINARIES_PREFIX}bin/${ANDROID_NDK_ABI_NAME}")
+else()
+  set(OPENCV_BIN_INSTALL_PATH "${OpenCV_INSTALL_BINARIES_PREFIX}bin")
+endif()
+
 if(NOT OPENCV_TEST_INSTALL_PATH)
   set(OPENCV_TEST_INSTALL_PATH "${OPENCV_BIN_INSTALL_PATH}")
 endif()
@@ -433,6 +446,19 @@ include(cmake/OpenCVPCHSupport.cmake)
 include(cmake/OpenCVModule.cmake)
 
 # ----------------------------------------------------------------------------
+#  Detect endianness of build platform
+# ----------------------------------------------------------------------------
+
+if(CMAKE_SYSTEM_NAME STREQUAL iOS)
+  # test_big_endian needs try_compile, which doesn't work for iOS
+  # http://public.kitware.com/Bug/view.php?id=12288
+  set(WORDS_BIGENDIAN 0)
+else()
+  include(TestBigEndian)
+  test_big_endian(WORDS_BIGENDIAN)
+endif()
+
+# ----------------------------------------------------------------------------
 #  Detect 3rd-party libraries
 # ----------------------------------------------------------------------------
 
@@ -440,7 +466,6 @@ include(cmake/OpenCVFindLibsGrfmt.cmake)
 include(cmake/OpenCVFindLibsGUI.cmake)
 include(cmake/OpenCVFindLibsVideo.cmake)
 include(cmake/OpenCVFindLibsPerf.cmake)
-
 
 # ----------------------------------------------------------------------------
 #  Detect other 3rd-party libraries/tools
@@ -476,6 +501,9 @@ endif()
 if(WITH_OPENCL)
   include(cmake/OpenCVDetectOpenCL.cmake)
 endif()
+
+# --- VTK support ---
+include(cmake/OpenCVDetectVTK.cmake)
 
 # ----------------------------------------------------------------------------
 # Add CUDA libraries (needed for apps/tools, samples)
@@ -565,16 +593,46 @@ include(cmake/OpenCVGenConfig.cmake)
 include(cmake/OpenCVGenInfoPlist.cmake)
 
 # Generate environment setup file
-if(INSTALL_TESTS AND OPENCV_TEST_DATA_PATH AND UNIX AND NOT ANDROID)
-  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/templates/opencv_testing.sh.in"
-                 "${CMAKE_BINARY_DIR}/unix-install/opencv_testing.sh" @ONLY)
-  install(FILES "${CMAKE_BINARY_DIR}/unix-install/opencv_testing.sh"
-          DESTINATION /etc/profile.d/ COMPONENT tests)
-  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/templates/opencv_run_all_tests.sh.in"
-                 "${CMAKE_BINARY_DIR}/unix-install/opencv_run_all_tests.sh" @ONLY)
-  install(FILES "${CMAKE_BINARY_DIR}/unix-install/opencv_run_all_tests.sh"
-          PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE
-          DESTINATION ${OPENCV_TEST_INSTALL_PATH} COMPONENT tests)
+if(INSTALL_TESTS AND OPENCV_TEST_DATA_PATH AND UNIX)
+  if(ANDROID)
+    get_filename_component(TEST_PATH ${OPENCV_TEST_INSTALL_PATH} DIRECTORY)
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/templates/opencv_run_all_tests_android.sh.in"
+                   "${CMAKE_BINARY_DIR}/unix-install/opencv_run_all_tests.sh" @ONLY)
+    install(PROGRAMS "${CMAKE_BINARY_DIR}/unix-install/opencv_run_all_tests.sh"
+            DESTINATION ${CMAKE_INSTALL_PREFIX} COMPONENT tests)
+  else()
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/templates/opencv_testing.sh.in"
+                   "${CMAKE_BINARY_DIR}/unix-install/opencv_testing.sh" @ONLY)
+    install(FILES "${CMAKE_BINARY_DIR}/unix-install/opencv_testing.sh"
+            DESTINATION /etc/profile.d/ COMPONENT tests)
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/templates/opencv_run_all_tests_unix.sh.in"
+                   "${CMAKE_BINARY_DIR}/unix-install/opencv_run_all_tests.sh" @ONLY)
+    install(PROGRAMS "${CMAKE_BINARY_DIR}/unix-install/opencv_run_all_tests.sh"
+            DESTINATION ${OPENCV_TEST_INSTALL_PATH} COMPONENT tests)
+
+  endif()
+endif()
+
+if(NOT OPENCV_README_FILE)
+  if(ANDROID)
+    set(OPENCV_README_FILE ${CMAKE_CURRENT_SOURCE_DIR}/platforms/android/README.android)
+  endif()
+endif()
+
+if(NOT OPENCV_LICENSE_FILE)
+  set(OPENCV_LICENSE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE)
+endif()
+
+# for UNIX it does not make sense as LICENSE and readme will be part of the package automatically
+if(ANDROID OR NOT UNIX)
+  install(FILES ${OPENCV_LICENSE_FILE}
+        PERMISSIONS OWNER_READ GROUP_READ WORLD_READ
+        DESTINATION ${CMAKE_INSTALL_PREFIX} COMPONENT libs)
+  if(OPENCV_README_FILE)
+    install(FILES ${OPENCV_README_FILE}
+            PERMISSIONS OWNER_READ GROUP_READ WORLD_READ
+            DESTINATION ${CMAKE_INSTALL_PREFIX} COMPONENT libs)
+  endif()
 endif()
 
 # ----------------------------------------------------------------------------
@@ -724,6 +782,7 @@ else()
 endif()
 
 status("    OpenGL support:" HAVE_OPENGL THEN "YES (${OPENGL_LIBRARIES})" ELSE NO)
+status("    VTK support:" HAVE_VTK THEN "YES (ver ${VTK_VERSION})" ELSE NO)
 
 # ========================== MEDIA IO ==========================
 status("")

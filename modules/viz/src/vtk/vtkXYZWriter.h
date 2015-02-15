@@ -10,13 +10,8 @@
 //                           License Agreement
 //                For Open Source Computer Vision Library
 //
-// Copyright (C) 2010-2012, Multicoreware, Inc., all rights reserved.
-// Copyright (C) 2010-2012, Advanced Micro Devices, Inc., all rights reserved.
+// Copyright (C) 2013, OpenCV Foundation, all rights reserved.
 // Third party copyrights are property of their respective owners.
-//
-// @Authors
-//    Fangfang Bai, fangfang@multicorewareinc.com
-//    Jin Ma,       jin@multicorewareinc.com
 //
 // Redistribution and use in source and binary forms, with or without modification,
 // are permitted provided that the following conditions are met:
@@ -31,7 +26,7 @@
 //   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
 //
-// This software is provided by the copyright holders and contributors as is and
+// This software is provided by the copyright holders and contributors "as is" and
 // any express or implied warranties, including, but not limited to, the implied
 // warranties of merchantability and fitness for a particular purpose are disclaimed.
 // In no event shall the Intel Corporation or contributors be liable for any direct,
@@ -42,45 +37,54 @@
 // or tort (including negligence or otherwise) arising in any way out of
 // the use of this software, even if advised of the possibility of such damage.
 //
+// Authors:
+//  * Anatoly Baksheev, Itseez Inc.  myname.mysurname <> mycompany.com
+//
 //M*/
-#include "perf_precomp.hpp"
 
-using namespace perf;
-using std::tr1::tuple;
-using std::tr1::get;
+#ifndef __vtkXYZWriter_h
+#define __vtkXYZWriter_h
 
-///////////// norm////////////////////////
+#include "vtkWriter.h"
 
-typedef tuple<Size, MatType> normParams;
-typedef TestBaseWithParam<normParams> normFixture;
-
-PERF_TEST_P(normFixture, norm, testing::Combine(
-                OCL_TYPICAL_MAT_SIZES,
-                OCL_PERF_ENUM(CV_8UC1, CV_32FC1)))
+namespace cv
 {
-    const normParams params = GetParam();
-    const Size srcSize = get<0>(params);
-    const int type = get<1>(params);
-    double value = 0.0;
-    const double eps = CV_MAT_DEPTH(type) == CV_8U ? DBL_EPSILON : 1e-3;
-
-    Mat src1(srcSize, type), src2(srcSize, type);
-    declare.in(src1, src2, WARMUP_RNG);
-
-    if (RUN_OCL_IMPL)
+    namespace viz
     {
-        ocl::oclMat oclSrc1(src1), oclSrc2(src2);
+        class vtkXYZWriter : public vtkWriter
+        {
+        public:
+            static vtkXYZWriter *New();
+            vtkTypeMacro(vtkXYZWriter,vtkWriter)
+            void PrintSelf(ostream& os, vtkIndent indent);
 
-        OCL_TEST_CYCLE() value = cv::ocl::norm(oclSrc1, oclSrc2, NORM_INF);
+            vtkGetMacro(DecimalPrecision, int)
+            vtkSetMacro(DecimalPrecision, int)
 
-        SANITY_CHECK(value, eps);
+            // Description:
+            // Specify file name of data file to write.
+            vtkSetStringMacro(FileName)
+            vtkGetStringMacro(FileName)
+
+            // Description:
+            // Get the input to this writer.
+            vtkPolyData* GetInput();
+            vtkPolyData* GetInput(int port);
+
+        protected:
+            vtkXYZWriter();
+            ~vtkXYZWriter(){}
+
+            void WriteData();
+            int FillInputPortInformation(int port, vtkInformation *info);
+
+            int DecimalPrecision;
+            char *FileName;
+
+        private:
+            vtkXYZWriter(const vtkXYZWriter&);  // Not implemented.
+            void operator=(const vtkXYZWriter&);  // Not implemented.
+        };
     }
-    else if (RUN_PLAIN_IMPL)
-    {
-        TEST_CYCLE() value = cv::norm(src1, src2, NORM_INF);
-
-        SANITY_CHECK(value);
-    }
-    else
-        OCL_PERF_ELSE
 }
+#endif
